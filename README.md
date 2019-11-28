@@ -1,2 +1,3 @@
 # readsProfiler
-ReadsProfiler and network templte
+ReadsProfiler and network template
+
