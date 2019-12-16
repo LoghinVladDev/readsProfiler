@@ -3,8 +3,9 @@
 #define PORT 3000
 #define MAXTHREADS 100
 #define MAXUSERS 50
+#define MAXSTRLEN 256
 //FilterFormat : char* = pageindex;noperpage;autor;titlu;anmic;anmare;categorie;rating
-//pageindex = char* itoa(int),la a cata pagina e user-u
+//pageindex =char* itoa(int),la a cata pagina e user-u
 //noperpage = char* itoa(int), cate pe pagina
 //autor  = char*
 //titlu = char*
@@ -15,74 +16,336 @@
 // msg [in client] = sprintf(msg,"%s(itoa'd)%s(itoa'd);%s;%s;%s(itoa'd);%s(itoa'd);%s;%s(itoa'd)",pageindex, noperpage, auth, title, syear,byear,cats, rat);
 
 
+/**
+ * Enum containing report ids, used for readability. 
+*/
 enum reports{
     socketError, bindError, listenError, acceptError,
     serverPortWait, threadMessageWait, threadReadError,
     threadReadSuccess,threadWriteNotify,threadWriteError,
     threadWriteSuccess, threadLogonSuccessful, threadLogonFailCapacity,
-    threadLogonFailLoggedIn
+    threadLogonFailLoggedIn, threadLogonTimedout
 };
 
+
+/**
+ * Header of the Server class.
+ */
 class Server
 {
     private:
         /*
             Structure containing thread id and linked client descriptor
+
+            [Mandatory] (int) idThread = index of the thread
+            [Mandatory] (int) clientDescriptor = the socket descriptor of the communication channel
+            [Optional] (Server*) parentServer = address of the creator thread. Used to call functions that belong to the server (i.e. ReportLog())
+            [Optional] (char*) linkedUser = name of the user the thread will be connected to. Used for reports, as ReportLog() can also log the user that wrote a specific command
         */
         struct thData
         {
+            //index of the thread
             int idThread;
+            //the socket descriptor of the communication channel
             int clientDescriptor;
+            //address of the creator thread. Used to call functions that belong to the server (i.e. ReportLog())
             Server* parentServer;
+            //linkedUser = name of the user the thread will be connected to. Used for reports, as ReportLog() can also log the user that wrote a specific command
             char * linkedUser;
         };
+        
+        //Array containing strings, each containing the name of a connected user.
         char** loggedUsers;
+
+        //String containing the name of the log file.
+        char * logName{nullptr};
+
+        //Number of users connected to the server at this time.
         int nLoggedUsers;
+
+        //The active server port. Needs to be the same for the connecting client.
         int serverPort;
+
+        //The descriptor that will be passed to the clients needed for communication
         int socketDescriptor;
+
+        //NOT YET USED
         int pid;
-        FILE* logFile{nullptr};
+
+        //The descriptor of the log file
+        int logFile{0};
+
+        int maxEntries;
+
+        DBResult *sentInfo;
+        
+        //Array containing information on each thread that the server creates (pthread_t *). Used to kill/join attached threads
         pthread_t *threads;
+
+        //Externally declared structure containing server IP, port, protocol family 
         sockaddr_in serverInfo;
+        
+        //Externally declared structure containing client IP, port, protocol family. Used to compare client connect information to server sockaddr_in structure
         sockaddr_in receivedInfo;
+
+        void DisconnectUser(const char *);
+
+        /**
+         * [Optional]
+         * [Debug function]
+         * Prints query results from database in a readable format on the debug console
+         * format is :
+         * title:
+         * author:
+         * genre:
+         * year:
+         * rating:
+         * ISBN:
+        */
+        void PrintResults(DBResult*, const int &);
+
+        /**
+         * Thread main() function
+         *
+         * Is called upon creating a new thread (pthread_create() argument 3), passing this as their main function, named Init in this context (ThreadINITcall)
+         * 
+         * Parameter is type void*, as it is the next argument in the pthread_create() function, will contain the address to the parameters given to the thread
+         * through the thData structure. It will need to be casted back to thData in the function to properly use the parameter and copied into a local thread
+         * variable as it is declared originally in Server, thus it is a shared resource
+         * 
+         * Function is static so that threads do not have to open another executable, just copy it from RAM
+         */
         static void* ThreadInitCall(void*);
-        FILE* CreateLog();
-        void ReportLog(const int = -1,const int = 0, const char* = nullptr);
+
+        /**
+         * Thread runtime function, treats clients' requests past the login (only enters this function upon a successful login).
+         * 
+         * Parameter is no longer void*, it is a thData, as it will not be modified, so it must be casted before the function.
+         */
+        void ThreadRuntime(thData);
+
+        /**
+         * Thread function called to treat the login protocol with the linked client (bootstrap)
+         * 
+         * Argument remains void* so that the original argument can be modified to contain the user that is connected to the thread, if the login protocol is
+         * successful. On failure, the structure will remain unmodified.
+         * 
+         * returns true if the client succesfully logged in, otherwise returns false
+         */
         bool ThreadLoginBootstrap(void*);
+
+        /**
+         * Function treating the vailidity of a login protocol, precisely whether the user is already logged in or not
+         * 
+         * Parameter is a char*, an address to the string containing the name of the used that attempts to log on
+         * 
+         * Returns true if the user is not logged in at the time, false otherwise
+         */
         bool isUserLoggedIn(const char*);
-        void ThreadRuntime(void*);
+
+        bool ThreadTimeout(const char*, const int&, int&);
+
+        /**
+         * [Optional]
+         * Function called to create the log file
+         * 
+         * Created log file is in the following naming format:
+         * log:[hour]-[minute][second]<->[day]:[month]:[year].txt
+         * 
+         * returns the descriptor of the log file.
+        */
+        int CreateLog();
+
+        int GetDateInSeconds(const char*);
+
+        /**
+         * [Optional]
+         * [Requires CreateLog()]
+         * Writes a log line (this->logFile), if it exists. 
+         * 
+         * Can be called from thread (outside the server class).
+         * 
+         * Value logId identifies the report, see enum reports;
+         * Value threadId contains the id of the thread in which is is called
+         * Value userId contains the name of the user to which the thread is connected to at the time of the function call
+        */
+        void ReportLog(const int  = -1,const int  = 0, const char* = nullptr);
     public:
+
+        /**
+         * Constructor of the Server object.
+         * 
+         * Parameter is int, optional, only use if starting server on another port. Default is 3000 
+         */
         Server(const int& = PORT);
+
+        /**
+         * Function returns the server's current local time and date.
+         * 
+         * Used in CreateLog(), ReportLog(),...
+         * 
+         * Return is char*, representing the address to the static string containing the time and date.
+         */
         char *GetLocaltime();
+
+        /**
+         * [Optional]
+         * Function that treats the server initialisation
+         * 
+         * Sets up the required structures and procedures for internet connection. (socket, bind, listen)
+         */
         void Init();
+
+        /**
+         * [Optional]
+         * [Debug function]
+         * Prints the names of the users that are logged in at the time of the function call
+         */
         void PrintLoggedUsers();
+
+        /**
+         * Main server runtime, loop treating client connections and thread creation.
+         */
         void Runtime();
+
+        /**
+         * Server destructor
+         */
         ~Server();
 };
 
-void Server::ThreadRuntime(void* arg)
+void Server::DisconnectUser(const char* username)
 {
-    Server::thData threadDataLocal = *((thData*)arg);
+    for(size_t i = 0; i < nLoggedUsers; i++)
+    {
+        printf("USER %s online\n", *(this->loggedUsers + i));
+    }
+    int index = 0;
+    for(;index<this->nLoggedUsers;index++)
+    {
+        if(!strcmp(*(this->loggedUsers+index), username))
+            break;
+    }
+    free(*(this->loggedUsers + index));
+    for(; index < this->nLoggedUsers-1; index++)
+        *(this->loggedUsers + index) = *(this->loggedUsers + index + 1);
+    *(this->loggedUsers + nLoggedUsers-1) = nullptr;
+    this->nLoggedUsers--;
+    for(size_t i = 0; i < nLoggedUsers; i++)
+    {
+        printf("USER %s online\n", *(this->loggedUsers + i));
+    }
+}
+
+void Server::PrintResults(DBResult* array, const int& length)
+{
+    for (size_t i = 0; i < length; i++)
+    {
+        printf("Title: %s\nAuthor: %s\nGenre: %s\nYear: %d\nRating: %d\nISBN: %d\n",
+            array[i].bookName, array[i].authorName, array[i].genre, array[i].year, array[i].rating,
+            array[i].ISBN);
+    }
+    
+}
+
+
+void Server::ThreadRuntime(thData threadDataLocal)
+{
+    int maxEntries = 0;
     DBFilter userFilter;
     userFilter.authorName = (char*)malloc(128);
     userFilter.bookName = (char*)malloc(128);
     char *request = (char*)malloc(1024);
-    char *sentInfo = (char*)malloc(65536);
     while(true)
     {
         memset(request, 0, 1024);
         if( 0 > read(threadDataLocal.clientDescriptor, request, 1024) )
             this->ReportLog(threadReadError, threadDataLocal.idThread, threadDataLocal.linkedUser);
-        memset(sentInfo,0,65536);
-        Database locationIndexer("./data/libIndex.json");
         printf("%s\n", request);
-        locationIndexer.DecodeFilter(&userFilter, request);
-        printf("Page: %d\nEntries: %d\nName: %s\nAuthor: %s\nmYear: %d\nMYear: %d\nFlags: %d\nrating: %d\n",userFilter.page, userFilter.entriesPerPage,
-            userFilter.bookName, userFilter.authorName, userFilter.minYear, userFilter.maxYear, userFilter.typeFlags, userFilter.rating);
-        strcpy(sentInfo, "suge-o");
-        if( 0 >= write(threadDataLocal.clientDescriptor, sentInfo, 1024))
-            this->ReportLog(threadWriteError, threadDataLocal.idThread, threadDataLocal.linkedUser);
+        if(!strcmp(request, "CLIENTEVENTQUIT"))
+        {
+            this->DisconnectUser(threadDataLocal.linkedUser);
+            break;
+        }
+        if(!strcmp(request, "CLIENTEVENTDISC"))
+        {
+            this->DisconnectUser(threadDataLocal.linkedUser);
+            break;
+        }
+        if(!strcmp(request, "CLIENTEVENTQUER"))
+        {
+            if( 0 > read(threadDataLocal.clientDescriptor, request, 1024) )
+                this->ReportLog(threadReadError, threadDataLocal.idThread, threadDataLocal.linkedUser);
+            Database locationIndexer("./data/libIndex.json");
+            printf("%s\n", request);
+            locationIndexer.DecodeFilter(&userFilter, request);
+            if(sentInfo != nullptr)
+                free(sentInfo);
+            sentInfo = (DBResult *)malloc(sizeof(DBResult) * userFilter.entriesPerPage);
+            memset(this->sentInfo, 0, sizeof(DBResult) * userFilter.entriesPerPage); 
+            this->maxEntries = locationIndexer.HandleQuery(this->sentInfo, userFilter.entriesPerPage, &userFilter);
+            printf("%d\n", this->maxEntries);
+            this->PrintResults(this->sentInfo, this->maxEntries);
+            if( 0 >= write(threadDataLocal.clientDescriptor ,this->sentInfo, sizeof(DBResult)*userFilter.entriesPerPage)) // TODO: write result
+                this->ReportLog(threadWriteError, threadDataLocal.idThread, threadDataLocal.linkedUser);
+            if( 0 >= write(threadDataLocal.clientDescriptor, &this->maxEntries, 4))
+                this->ReportLog(threadWriteError, threadDataLocal.idThread, threadDataLocal.linkedUser);
+        }
+        if(!strcmp(request, "CLIENTEVENTDOWN"))
+        {
+            printf("0\n");
+            int index = 0;
+            if( 0 > read(threadDataLocal.clientDescriptor, &index, 4))
+                this->ReportLog(threadReadError, threadDataLocal.idThread, threadDataLocal.linkedUser);
+            printf("%s\n", (*(this->sentInfo+index)).diskPath);
+            char *tempPath = (char*)malloc(256);
+            strcpy(tempPath, (*(this->sentInfo+index)).diskPath);
+            strcpy(strstr(tempPath, ".txt"), ".temp.txt");
+            printf("%s\n",tempPath);
+            if(!fork())
+                execl("/bin/cp","cp",(*(this->sentInfo+index)).diskPath, tempPath, NULL);
+            wait(NULL);
+            int fd = open(tempPath, O_RDONLY, 0666);
+            perror("FileDesc");
+            char *p;
+            char *buffer = (char*)malloc(1024);
+            memset(buffer, 0, 1024);
+            strcpy(buffer, (*(this->sentInfo+index)).diskPath);
+            p = strchr(strchr(strchr(buffer, '/')+1,'/')+1,'/') + 1;
+            printf("%s\n", p);
+            if( 0>= write(threadDataLocal.clientDescriptor, p, 1024))
+                this->ReportLog(threadWriteError, threadDataLocal.idThread, threadDataLocal.linkedUser);
+            struct stat st;
+            memset(&st, 0, sizeof(struct stat));
+            fstat(fd, &st);
+            printf("%lld\n", (long long)st.st_size);
+            write(threadDataLocal.clientDescriptor,(long long*)&st.st_size, 8);
+
+            while( read(fd, buffer, 1024) >0 )
+            {
+                printf("%s\n", buffer);
+                write(threadDataLocal.clientDescriptor, buffer, 1024);
+            }
+            memset(buffer, 0, 1024);
+            write(threadDataLocal.clientDescriptor, buffer, 1024);
+            close(fd);
+            printf("%s\n", tempPath);
+            strcpy(tempPath, (*(this->sentInfo+index)).diskPath);
+            strcpy(strstr(tempPath, ".txt"), ".temp.txt");
+            /*if(!fork())
+                execl("bin/rm","rm",tempPath, NULL);*/
+            strcpy(buffer, "rm ");
+            strcat(buffer, tempPath);
+            system(buffer);
+            //wait(NULL);
+            free(buffer);
+            free(tempPath);
+            fflush(stdout);
+        }
     }
+    free(request);
+    free(userFilter.authorName);
+    free(userFilter.bookName);
 }
 
 void* Server::ThreadInitCall(void* arg)
@@ -90,12 +353,13 @@ void* Server::ThreadInitCall(void* arg)
     Server::thData threadDataLocal;
     threadDataLocal = *((thData*)arg);
     threadDataLocal.parentServer->ReportLog(threadMessageWait, threadDataLocal.idThread);
-    if(threadDataLocal.parentServer->ThreadLoginBootstrap((thData*)arg))
+    if(threadDataLocal.parentServer->ThreadLoginBootstrap((thData*)&threadDataLocal))
     {
-        threadDataLocal.parentServer->ThreadRuntime((thData*)arg);
-    } //TODO : investigate this crap
-    pthread_detach(pthread_self()); //! detach aici sau mai jos???
-    close((intptr_t)arg);
+        threadDataLocal.parentServer->ThreadRuntime(threadDataLocal);
+    } 
+    close(threadDataLocal.clientDescriptor);
+    pthread_detach(pthread_self()); 
+    pthread_cancel(pthread_self());
     return (NULL);
 
 }
@@ -130,9 +394,44 @@ int kbhit()
     return FD_ISSET(STDIN_FILENO, &fds);
 }
 
+int Server::GetDateInSeconds(const char* givenDate)
+{
+    printf("%s0\n", givenDate);
+    char *date = (char*)malloc(64);
+    strcpy(date, givenDate);   
+    *strchr(date, '<') = 0;
+    int seconds = atoi(strchr(strchr(date, '-') + 1, '-')+1);
+    *strchr(strchr(date, '-') + 1,'-') = 0;
+    int minutes = atoi(strchr(date, '-')+1);
+    *strchr(date, '-') = 0;
+    int hours = atoi(date);
+    free(date);
+    return hours * 3600 + minutes * 60 + seconds;
+}
+
+bool Server::ThreadTimeout(const char* startDate, const int& seconds, int& secondsLeft)
+{
+    if(*startDate == 0)
+        return false;
+    char *currentDate = (char*)malloc(64);
+    strcpy(currentDate, this->GetLocaltime());
+    int startSeconds = this->GetDateInSeconds(startDate);
+    int currentSeconds = this->GetDateInSeconds(currentDate);
+    free(currentDate);
+    secondsLeft = seconds - (currentSeconds - startSeconds);
+    if(secondsLeft <= 0)
+        return false;
+    return true;
+}
+
 bool Server::ThreadLoginBootstrap(void* arg)
 {
-    FILE* usr, *pwd;
+    int timeoutSeconds = 0;
+    int seconsToBeAddedToTimeout = 30;
+    int timeoutSecondsLeft = 0;
+    
+    char *timeout = (char*)malloc(64);
+    memset(timeout, 0, 64);
     int attempts = 0;
     char *clientRequest = (char*)malloc(256);
     char * username = (char*)malloc(128);
@@ -143,39 +442,91 @@ bool Server::ThreadLoginBootstrap(void* arg)
     threadDataLocal = *((Server::thData*)arg);
     do
     {
-        Database usersDB("./data/accounts.json");
+        Database usersDB("./data/accounts.json", 8192);
         memset(clientRequest, 0, 256);
-        if( 0 > read(threadDataLocal.clientDescriptor, clientRequest, 256))
+        int bytesRead = 0;
+        if( 0 > (bytesRead = read(threadDataLocal.clientDescriptor, clientRequest, 256)))
             this->ReportLog(threadReadError, threadDataLocal.idThread);
-        else
+        else if(bytesRead > 0)
             this->ReportLog(threadReadSuccess, threadDataLocal.idThread);
+            else
+            {
+                this->ReportLog(threadLogonFailLoggedIn, threadDataLocal.idThread);
+                free(clientRequest);
+                free(username);
+                free(timeout);
+                return false;
+            }
+            
+        if(!strcmp(clientRequest, "CLIENTEVENTQUIT"))
+            return false;
+        if(!strcmp(clientRequest, "CLIENTEVENTDISC"))
+            return false;
         p = strtok(clientRequest, ";");
         p = strtok(NULL, ";");
         isLoggedOn = usersDB.ConfirmLogon(clientRequest, p);
+        printf("%d0\n", isLoggedOn);
+        strcpy(username, clientRequest);
+        strcpy(clientRequest,  isLoggedOn ? "LOGONACCMPL" : "LOGONFAILED"); 
+        if(ThreadTimeout(timeout, timeoutSeconds, timeoutSecondsLeft))
+        {
+            this->ReportLog(threadWriteNotify, threadDataLocal.idThread);
+            if( 0 >= write(threadDataLocal.clientDescriptor, "ERRTIMEDOUT", 12))
+                this->ReportLog(threadWriteError, threadDataLocal.idThread);
+            else
+                this->ReportLog(threadWriteSuccess, threadDataLocal.idThread);
+
+            printf("Seconds left : %d\n", timeoutSecondsLeft);
+            fflush(stdout);
+
+            this->ReportLog(threadWriteNotify, threadDataLocal.idThread);
+            if( 0 >= write(threadDataLocal.clientDescriptor, &timeoutSecondsLeft, 4))
+                this->ReportLog(threadWriteError, threadDataLocal.idThread);
+            else
+                this->ReportLog(threadWriteSuccess, threadDataLocal.idThread);
+            usersDB.~Database();
+            continue;
+        }
+        if(isLoggedOn)
+        {
+            if(this->isUserLoggedIn(username))
+            {
+                strcpy(clientRequest, "ERRLOGGEDIN");
+                this->ReportLog(threadLogonFailLoggedIn, threadDataLocal.idThread, username);
+                isLoggedOn = false;
+            }
+            if(this->nLoggedUsers == MAXUSERS)
+            {
+                strcpy(clientRequest, "LGERRCAPHIT");
+                this->ReportLog(threadLogonFailCapacity,threadDataLocal.idThread, username);
+                isLoggedOn = false;
+            }
+        }
+        this->ReportLog(threadWriteNotify, threadDataLocal.idThread);
+        if( 0>= write(threadDataLocal.clientDescriptor, clientRequest, 12))
+            this->ReportLog(threadWriteError, threadDataLocal.idThread);
+        else
+            this->ReportLog(threadWriteSuccess, threadDataLocal.idThread);
+
         if(!isLoggedOn)
             attempts++;
+        
+        if(attempts == 3)
+        {
+            strcpy(timeout, this->GetLocaltime());
+            timeoutSeconds = seconsToBeAddedToTimeout;
+            seconsToBeAddedToTimeout *= 2;
+            attempts = 0;
+        }
+
     } while (isLoggedOn == false && attempts < 3);
-    strcpy(username, clientRequest);
-    strcpy(clientRequest,  isLoggedOn ? "LOGONACCMPL" : "LOGONFAILED");
-    if(this->nLoggedUsers == MAXUSERS && isLoggedOn)
-    {
-        strcpy(clientRequest, "LGERRCAPHIT");
-        this->ReportLog(threadLogonFailCapacity,threadDataLocal.idThread, username);
-        isLoggedOn = false;
-    }
-    if(this->isUserLoggedIn(username))
-    {
-        strcpy(clientRequest, "ERRLOGGEDIN");
-        this->ReportLog(threadLogonFailLoggedIn, threadDataLocal.idThread, username);
-        isLoggedOn = false;
-    }
-    this->ReportLog(threadWriteNotify, threadDataLocal.idThread);
-    if( 0>= write(threadDataLocal.clientDescriptor, clientRequest, 11))
-        this->ReportLog(threadWriteError, threadDataLocal.idThread);
-    else
-        this->ReportLog(threadWriteSuccess, threadDataLocal.idThread);
     if(isLoggedOn == false)
+    {
+        free(clientRequest);
+        free(username);
+        free(timeout);
         return false;
+    }
     *(this->loggedUsers + nLoggedUsers) = (char*)malloc(128);
     memset(*(this->loggedUsers + nLoggedUsers), 0 ,128);
     strcpy(*(this->loggedUsers + nLoggedUsers++), username);
@@ -185,6 +536,7 @@ bool Server::ThreadLoginBootstrap(void* arg)
     strcpy((*((thData*)arg)).linkedUser, username);
     free(clientRequest);
     free(username);
+    free(timeout);
     return true;
 }
 
@@ -207,10 +559,10 @@ void Server::Runtime()
             continue;
         }
         threadData = (thData*)malloc(sizeof(thData));
-        threadData->idThread = threadIndex++;
+        threadData->idThread = threadIndex;
         threadData->clientDescriptor = client;
         threadData->parentServer = this;
-        pthread_create(&this->threads[threadIndex], NULL, this->ThreadInitCall, threadData);
+        pthread_create(&this->threads[threadIndex++], NULL, this->ThreadInitCall, (void*)threadData);
     }
 }
 
@@ -219,7 +571,7 @@ void Server::Init()
     this->logFile = this->CreateLog();
     if(-1 == (this->socketDescriptor = socket(AF_INET, SOCK_STREAM, 0)))
         this->ReportLog(socketError);
-    int on;
+    int on = 1;
     setsockopt(this->socketDescriptor, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(int));
     if(-1 == bind(this->socketDescriptor, (sockaddr *)&this->serverInfo, sizeof(sockaddr)))
         this->ReportLog(bindError);
@@ -229,13 +581,14 @@ void Server::Init()
 
 Server::Server(const int& givenPort)
 {
+    this->sentInfo = nullptr;
     this->pid = 0;
     this->nLoggedUsers = 0;
     this->socketDescriptor = 0;
     this->serverPort = givenPort;
     this->threads = (pthread_t *)malloc(sizeof(pthread_t) * 100);
-    this->loggedUsers = (char**)malloc(MAXUSERS);
-    memset(this->loggedUsers, 0, MAXUSERS);
+    this->loggedUsers = (char**)malloc(MAXUSERS * sizeof(size_t));
+    memset(this->loggedUsers, 0, MAXUSERS * sizeof(size_t));
     memset(this->threads, 0, MAXTHREADS*sizeof(pthread_t));
     memset(&this->serverInfo, 0, sizeof(sockaddr_in));
     memset(&this->receivedInfo, 0, sizeof(sockaddr_in));
@@ -250,8 +603,8 @@ Server::~Server()
     this->pid = 0;
     this->serverPort = 0;
     free(this->threads);
-    fclose(this->logFile);
-    this->logFile = nullptr;
+    close(this->logFile);
+    this->logFile = 0;
 }
 
 char* Server::GetLocaltime()
@@ -265,70 +618,98 @@ char* Server::GetLocaltime()
     return timeString;
 }
 
+
+
 void Server::ReportLog(const int logId, const int threadId,const char* userId)
 {
+    char* logLine = (char*)malloc(MAXSTRLEN);
+    memset(logLine ,0 ,MAXSTRLEN);
+    flock fileLock;
+    fileLock.l_type = F_WRLCK;
+    fileLock.l_len = MAXSTRLEN;
+    fileLock.l_start = 0;
+    fileLock.l_whence = SEEK_CUR;
+    fcntl(this->logFile, F_SETLK, &fileLock);
     switch(logId)
     {
         case socketError:
-            fprintf(this->logFile,"[Server][%s]socket() function error!\nServer exited with code 1.\n",this->GetLocaltime());
-            fflush(this->logFile);
+            sprintf(logLine, "[Server][%s]socket() function error!\nServer exited with code 1.\n",this->GetLocaltime());
+            write(this->logFile, logLine, strlen(logLine));
+            close(this->logFile);
             exit(1);         
         case bindError:
-            fprintf(this->logFile,"[Server][%s]bind() function error!\nServer exited with code 2.\n",this->GetLocaltime());
-            fflush(this->logFile);
+            sprintf(logLine,"[Server][%s]bind() function error!\nServer exited with code 2.\n",this->GetLocaltime());
+            write(this->logFile, logLine, strlen(logLine));
+            close(this->logFile);
             exit(2);
         case listenError:
-            fprintf(this->logFile,"[Server][%s]listen() function error!\nServer exited with code 3.\n",this->GetLocaltime());
-            fflush(this->logFile);
+            sprintf(logLine,"[Server][%s]listen() function error!\nServer exited with code 3.\n",this->GetLocaltime());
+            write(this->logFile, logLine, strlen(logLine));
+            close(this->logFile);
             exit(3);
         case acceptError:
-            fprintf(this->logFile,"[Server][%s]accept() function error!\nContinuing Server program.\n",this->GetLocaltime());
+            sprintf(logLine,"[Server][%s]accept() function error!\nContinuing Server program.\n",this->GetLocaltime());
+            write(this->logFile, logLine, strlen(logLine));
             break;
         case serverPortWait:
-            fprintf(this->logFile, "[Server][%s]Waiting @ port %d...\n", this->GetLocaltime(), this->serverPort);
+            sprintf(logLine, "[Server][%s]Waiting @ port %d...\n", this->GetLocaltime(), this->serverPort);
+            write(this->logFile, logLine, strlen(logLine));
             break;
         case threadMessageWait:
-            fprintf(this->logFile, "[Thread - %d][%s]Waiting for message...\n", threadId, this->GetLocaltime());
+            sprintf(logLine, "[Thread - %d][%s]Waiting for message...\n", threadId, this->GetLocaltime());
+            write(this->logFile, logLine, strlen(logLine));
             break;
         case threadReadError:
-            fprintf(this->logFile,"[Thread - %d][%s]read() function error!\nContinuing program.\n",threadId, this->GetLocaltime());
+            sprintf(logLine,"[Thread - %d][%s]read() function error!\nContinuing program.\n",threadId, this->GetLocaltime());
+            write(this->logFile, logLine, strlen(logLine));
             break;
         case threadWriteError:
-            fprintf(this->logFile,"[Thread - %d][%s]write() function error!\nContinuing program.\n",threadId, this->GetLocaltime());
+            sprintf(logLine,"[Thread - %d][%s]write() function error!\nContinuing program.\n",threadId, this->GetLocaltime());
+            write(this->logFile, logLine, strlen(logLine));
             break;
         case threadWriteNotify:
-            fprintf(this->logFile,"[Thread - %d][%s]Writing message to client.\n",threadId, this->GetLocaltime());
+            sprintf(logLine,"[Thread - %d][%s]Writing message to client.\n",threadId, this->GetLocaltime());
+            write(this->logFile, logLine, strlen(logLine));
             break;
         case threadWriteSuccess:
-            fprintf(this->logFile,"[Thread - %d][%s]Wrote message to client.\n",threadId, this->GetLocaltime());
+            sprintf(logLine,"[Thread - %d][%s]Wrote message to client.\n",threadId, this->GetLocaltime());
+            write(this->logFile, logLine, strlen(logLine));
             break;
         case threadReadSuccess:
-            fprintf(this->logFile,"[Thread - %d][%s]Received message from client.\n",threadId, this->GetLocaltime());
+            sprintf(logLine,"[Thread - %d][%s]Received message from client.\n",threadId, this->GetLocaltime());
+            write(this->logFile, logLine, strlen(logLine));
             break;
         case threadLogonFailCapacity:
-            fprintf(this->logFile,"[Thread - %d][%s]Users capacity reached!\nUser %s failed to log on.\n", threadId, this->GetLocaltime(), userId);
+            sprintf(logLine,"[Thread - %d][%s]Users capacity reached!\nUser %s failed to log on.\n", threadId, this->GetLocaltime(), userId);
+            write(this->logFile, logLine, strlen(logLine));
             break;
         case threadLogonFailLoggedIn:
-            fprintf(this->logFile,"[Thread - %d][%s]User %s already logged in!\n", threadId, this->GetLocaltime(), userId);
+            sprintf(logLine,"[Thread - %d][%s]User %s already logged in!\n", threadId, this->GetLocaltime(), userId);
+            write(this->logFile, logLine, strlen(logLine));
             break;
         case threadLogonSuccessful:
-            fprintf(this->logFile,"[Thread - %d][%s]User %s has logged into the server!\n", threadId, this->GetLocaltime(), userId);
+            sprintf(logLine,"[Thread - %d][%s]User %s has logged into the server!\n", threadId, this->GetLocaltime(), userId);
+            write(this->logFile, logLine, strlen(logLine));
             break;
         default:
-            fprintf(this->logFile,"[Server][%s]Unknown Log Request!!\n",this->GetLocaltime());
-            fflush(this->logFile);
-            return;
+            sprintf(logLine,"[Server][%s]Unknown Log Request!!\n",this->GetLocaltime());
+            write(this->logFile, logLine, strlen(logLine));
     }
-    fflush(this->logFile);
+    
+    // ? fcntl(this->logFile, F_GETLK, &fileLock);
+    fileLock.l_type = F_UNLCK;
+    fcntl(this->logFile, F_SETLK, &fileLock);
+    close(this->logFile);
+    this->logFile = open(this->logName, O_WRONLY,0666);
+    lseek(this->logFile, 0, SEEK_END);
 }
 
-FILE* Server::CreateLog()
+int Server::CreateLog()
 {
-    static FILE* fileName;
-    char* logName = (char*)malloc(256);
-    memset(logName, 0, 256);
-    sprintf(logName,"./logs/server/log:%s", this->GetLocaltime());
-    fileName = fopen(logName, "w");
-    free(logName);
-    return fileName;
+    int fileDesc;
+    this->logName = (char*)malloc(256);
+    memset(this->logName, 0, 256);
+    sprintf(this->logName,"./logs/server/log:%s.txt", this->GetLocaltime());
+    fileDesc = open(this->logName, O_WRONLY | O_CREAT | O_TRUNC,0666);
+    return fileDesc;
 }
