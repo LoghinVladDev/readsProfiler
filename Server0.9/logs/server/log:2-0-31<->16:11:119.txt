@@ -1,0 +1,32 @@
+[Server][2-0-31<->16:11:119]Waiting @ port 3000...
+[Server][2-0-35<->16:11:119]Waiting @ port 3000...
+[Thread - 0][2-0-35<->16:11:119]Waiting for message...
+[Thread - 0][2-0-35<->16:11:119]Received message from client.
+[Thread - 0][2-0-35<->16:11:119]Writing message to client.
+[Thread - 0][2-0-35<->16:11:119]Wrote message to client.
+[Thread - 0][2-1-28<->16:11:119]Received message from client.
+[Server][2-1-53<->16:11:119]Waiting @ port 3000...
+[Thread - 1][2-1-53<->16:11:119]Waiting for message...
+[Thread - 1][2-1-53<->16:11:119]Received message from client.
+[Thread - 1][2-1-53<->16:11:119]Writing message to client.
+[Thread - 1][2-1-53<->16:11:119]Wrote message to client.
+[Thread - 1][2-1-59<->16:11:119]User (null) already logged in!
+[Server][2-2-36<->16:11:119]Waiting @ port 3000...
+[Thread - 2][2-2-36<->16:11:119]Waiting for message...
+[Thread - 2][2-2-36<->16:11:119]Received message from client.
+[Thread - 2][2-2-36<->16:11:119]Writing message to client.
+[Thread - 2][2-2-36<->16:11:119]Wrote message to client.
+[Thread - 2][2-2-41<->16:11:119]User (null) already logged in!
+[Server][2-2-47<->16:11:119]Waiting @ port 3000...
+[Thread - 3][2-2-47<->16:11:119]Received message from client.
+[Thread - 3][2-2-47<->16:11:119]Writing message to client.
+[Thread - 3][2-2-47<->16:11:119]Wrote message to client.
+[Thread - 3][2-2-52<->16:11:119]Received message from client.
+[Thread - 3][2-2-52<->16:11:119]Writing message to client.
+[Thread - 3][2-2-52<->16:11:119]Wrote message to client.
+[Thread - 3][2-2-52<->16:11:119]User admin has logged into the server!
+[Server][2-8-19<->16:11:119]Waiting @ port 3000...
+[Thread - 4][2-8-19<->16:11:119]Received message from client.
+[Thread - 4][2-8-19<->16:11:119]Writing message to client.
+[Thread - 4][2-8-19<->16:11:119]Wrote message to client.
+[Thread - 4][2-8-19<->16:11:119]User admin has logged into the server!

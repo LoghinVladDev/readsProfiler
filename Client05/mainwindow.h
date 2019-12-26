@@ -1,6 +1,7 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,6 +19,7 @@
 #include <QSignalMapper>
 
 #include <QPushButton>
+
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -74,6 +76,29 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
+
+    /**
+     * @brief ReportLog
+     *
+     * [Optional]
+     * [Requires CreateLog()]
+     * Function writes a log to the created log file, log id will be passed down through the parameter
+     *
+     * @param idLog type int will contain an item from enum reports (refer reports), descibing the event which is to be logged
+     */
+    void ReportLog(const int = -1);
+
+    inline bool& GetConnectedStatus() {return this->isConnected;}
+
+    inline int& GetSocketDescriptor() {return this->socketDescriptor;}
+
+    inline QString& GetIpString() { return this->serverIP; }
+
+    inline QString& GetPortString() { return this->serverPort; }
+
+    inline sockaddr_in& GetServerInfo() {return this->serverInfo;}
+
+    inline int& GetReconnect() { return this->reconnect; }
 
     /**
      * @brief MainWindow Constructor
@@ -148,9 +173,10 @@ public:
      */
     char *GetLocalTime();
 
-signals:
+protected:
+    void keyPressEvent(QKeyEvent*);
 
-
+    void keyReleaseEvent(QKeyEvent*);
 
 private slots:
 
@@ -195,6 +221,7 @@ private slots:
      * @param position assigned to the slider
      */
 
+    void buttonRead_clicked(int indexButton);
 
     void buttonDownload_clicked(int index);
 
@@ -235,6 +262,11 @@ private slots:
 
     void on_actionSettings_triggered();
 
+
+    void on_actionHide_Show_triggered();
+
+    void on_pushButtonCreateAccount_clicked();
+
 private:
     /**
      * @brief ui
@@ -247,7 +279,11 @@ private:
 
     int actualNumberEntries;
 
+    QSignalMapper *readButtonSignalMapper;
+
     QSignalMapper *signalMapper;
+
+    int reconnect = 0;
 
     int pressedButton;
 
@@ -275,6 +311,8 @@ private:
     //externally declared structure containing the information required to connect to the server. Contains IP, port and protocol family of the server
     sockaddr_in serverInfo;
 
+    QString serverIP;
+    QString serverPort;
 
     /**
      * @brief GetCurrentGenreFlag
@@ -303,16 +341,6 @@ private:
      */
     void AddToList(DBResult*, const int&);
 
-    /**
-     * @brief ReportLog
-     *
-     * [Optional]
-     * [Requires CreateLog()]
-     * Function writes a log to the created log file, log id will be passed down through the parameter
-     *
-     * @param idLog type int will contain an item from enum reports (refer reports), descibing the event which is to be logged
-     */
-    void ReportLog(const int = -1);
 
     /**
      * @brief CreateLog

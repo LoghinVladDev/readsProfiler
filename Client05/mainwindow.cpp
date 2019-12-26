@@ -7,6 +7,9 @@
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QMessageBox>
+#include "settingswindow.h"
+#include "createaccount.h"
+#include "readwindow.h"
 
 #define DB_DRAMA 1
 #define DB_COMED 2
@@ -17,27 +20,35 @@
 #define DB_ABIOG 64
 #define DB_CHILD 128
 #define DB_ACTIO 256
-#define DB_ALLGN 511
+#define DB_FANTA 512
+#define DB_ROMAN 1024
+#define DB_ALLGN 2047
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow)
 {
     memset(&this->serverInfo, 0 ,sizeof(sockaddr_in));
+    this->serverIP = "127.0.0.1";
+    this->serverPort = "3000";
     this->entries = nullptr;
     this->serverInfo.sin_family = AF_INET;
-    this->serverInfo.sin_addr.s_addr = inet_addr("127.0.0.1");
-    this->serverInfo.sin_port = htons(3000);
+    this->serverInfo.sin_addr.s_addr = inet_addr(this->serverIP.toStdString().c_str());
+    this->serverInfo.sin_port = htons(atoi(this->serverPort.toStdString().c_str()));
     this->ui->setupUi(this);
     this->ui->actionDisconnect->setEnabled(false);
     this->ui->libGroup->hide();
     this->pressedButton = 0;
     this->downloadDirPath = (char*)malloc(256);
+
+    this->readButtonSignalMapper = new QSignalMapper(this);
+    connect(this->readButtonSignalMapper, SIGNAL(mapped(int)), this, SLOT(buttonRead_clicked(int)));
+
     this->signalMapper = new QSignalMapper(this);
     connect(this->signalMapper, SIGNAL(mapped(int)), this, SLOT(buttonDownload_clicked(int)));
     memset(this->downloadDirPath, 0 ,256);
     strcpy(this->downloadDirPath, "./downloads");
     if(0 == (this->downloadDir = opendir(this->downloadDirPath)))
     {
-        mkdir(this->downloadDirPath, 0666);
+        mkdir(this->downloadDirPath, 0700);
     }
     closedir(this->downloadDir);
 }
@@ -64,6 +75,13 @@ MainWindow::~MainWindow()
 
 void MainWindow::on_pushButtonLogin_clicked()
 {
+    if(this->GetReconnect() == 1)
+    {
+        this->GetReconnect() = 0;
+        ::close(socketDescriptor);
+        socketDescriptor = socket(AF_INET, SOCK_STREAM, 0);
+        isConnected = false;
+    }
     if(isConnected == false)
     {
         if( -1 == ::connect(this->socketDescriptor, (sockaddr* )&this->serverInfo, sizeof(sockaddr))) // ::connect  (=) extern::connect
@@ -217,8 +235,6 @@ void MainWindow::AddToList(DBResult * array, const int & length)
         ui->tableWidgetQueryResult->setItem(i, 4, new QTableWidgetItem(QString(itoa(array[i].year))));
         ui->tableWidgetQueryResult->setItem(i, 5, new QTableWidgetItem(QString(itoa(array[i].rating))));
 
-
-
         QWidget * pWidget = new QWidget();
         QPushButton* buttonDownload = new QPushButton();
         buttonDownload->setText("Download");
@@ -231,22 +247,70 @@ void MainWindow::AddToList(DBResult * array, const int & length)
         connect(buttonDownload, SIGNAL(clicked()), this->signalMapper, SLOT(map()));
         this->signalMapper->setMapping(buttonDownload, i);
 
-        ui->tableWidgetQueryResult->setCellWidget(i, 6, pWidget);
-        /*for(size_t j = 0; j< 6; j++)
-        {
-            ui->tableWidgetQueryResult->setItem(i, j, tableArray[j]);
-        }*/
-        //free(tableArray);
+        QWidget *readParentWidget = new QWidget();
+        QPushButton *readPushButton = new QPushButton();
+
+        readPushButton->setText("Read");
+        QLayout* readButtonLayout = new QHBoxLayout(readParentWidget);
+
+        readButtonLayout->addWidget(readPushButton);
+        readButtonLayout->setAlignment(Qt::AlignCenter);
+        readButtonLayout->setContentsMargins(0,0,0,0);
+        readParentWidget->setLayout(readButtonLayout);
+
+        connect(readPushButton, SIGNAL(clicked()), this->readButtonSignalMapper, SLOT(map()));
+        this->readButtonSignalMapper->setMapping(readPushButton, i);
+
+        ui->tableWidgetQueryResult->setCellWidget(i,6, readParentWidget);
+        ui->tableWidgetQueryResult->setCellWidget(i, 7, pWidget);
     }
 }
 
 
+void MainWindow::buttonRead_clicked(int indexButton)
+{
+    printf("MEn\n");
+    fflush(stdout);
+    char* fileAbsPath = (char*)malloc(256);
+
+    this->filterBuffer = (char*)malloc(1024);
+
+    memset(this->filterBuffer, 0 ,1024);
+    strcpy(this->filterBuffer, "CLIENTEVENTDOWN");
+    write(socketDescriptor, this->filterBuffer, 1024);
+
+    write(socketDescriptor, &indexButton, 4);
+    read(socketDescriptor, this->filterBuffer, 1024);
+
+    sprintf(fileAbsPath, "%s/%s%s", this->downloadDirPath, "readTemp", this->filterBuffer);
+
+    long long fileSize = 0;
+    int chunkSize = 0;
+    long long bytesSum;
+    int tempBookDescriptor = open(fileAbsPath, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+
+    read(this->GetSocketDescriptor(), &fileSize, 8);
+
+    do
+    {
+        read(this->GetSocketDescriptor(), &chunkSize, 4);
+        read(this->GetSocketDescriptor(), filterBuffer, 1024);
+
+       bytesSum += chunkSize;
+
+       write(tempBookDescriptor, filterBuffer, (size_t)chunkSize);
+    }while(chunkSize > 0);
+
+    ::close(tempBookDescriptor);
+
+    ReadWindow* bookWindow = new ReadWindow(this, fileAbsPath);
+    free(fileAbsPath);
+    free(this->filterBuffer);
+}
+
 void MainWindow::buttonDownload_clicked(int index)
 {
-   /* QPushButton* button = qobject_cast<QPushButton*>(sender());
-    if(!button)
-        return;*/
-    printf("%d\n",index);
+    printf("DownTest\n");
     fflush(stdout);
     this->filterBuffer = (char*)malloc(1024);
 
@@ -261,37 +325,79 @@ void MainWindow::buttonDownload_clicked(int index)
     strcpy(downloadFileName, this->downloadDirPath);
     strcat(downloadFileName, "/");
     strcat(downloadFileName, this->filterBuffer);
+    printf("%s\n", downloadFileName);
+    fflush(stdout);
     int bookDescriptor = open(downloadFileName, O_WRONLY | O_CREAT | O_TRUNC, 0666);
 
     long long fileSize = 0;
 
-    printf("%s\n", downloadFileName);
-    fflush(stdout);
     read(socketDescriptor, &fileSize, 8);
+
+    printf("File size: %lld\n", fileSize);
+    fflush(stdout);
+
+    long long bytesSum = 0;
     int lbytes = 0;
-    while((lbytes = read(socketDescriptor, this->filterBuffer, 1024)))
+    /*while((lbytes = read(socketDescriptor, this->filterBuffer, 1024)))
     {
-        printf("plm");
+        printf("%d\n", lbytes);
         fflush(stdout);
         if(*this->filterBuffer == 0)
+        {
+
+            printf("eee\n");
+
+            fflush(stdout);
             break;
+        }
+        bytesSum+=lbytes;
         write(bookDescriptor, this->filterBuffer, strlen(this->filterBuffer));
     }
-    printf("%s\n", downloadFileName);
-    fflush(stdout);
+    ::close(bookDescriptor);*/
+
+    do
+    {
+        read(this->GetSocketDescriptor(), &lbytes, 4);
+        read(this->GetSocketDescriptor(), filterBuffer, 1024);
+        bytesSum += lbytes;
+        write(bookDescriptor, filterBuffer, (size_t)lbytes);
+    }while(lbytes > 0);
 
     ::close(bookDescriptor);
 
-    free(downloadFileName);
+    printf("full size: %lld. Actual size: %lld\n", fileSize, bytesSum);
+    fflush(stdout);
 
+    free(downloadFileName);
     free(this->filterBuffer);
 }
 
 void MainWindow::InitLibrary()
 {
+    this->ui->filterGroup->setFixedSize(200, 680);
+    this->ui->actionSettings->setEnabled(false);
     this->ui->actionDisconnect->setEnabled(true);
     this->filterBuffer = (char*)malloc(1024);
 
+    this->ui->tableWidgetQueryResult->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    QStringList tableHeader;
+    tableHeader << "ISBN" << "Title" << "Author" << "Genre" << "Publish Year" << "Rating" << "Read" << "Download" ;
+    this->ui->tableWidgetQueryResult->verticalHeader()->setVisible(false);
+    this->ui->tableWidgetQueryResult->setHorizontalHeaderLabels(tableHeader);
+    this->ui->tableWidgetQueryResult->setColumnWidth(0, 20);
+    this->ui->tableWidgetQueryResult->setColumnWidth(1,500);
+    this->ui->tableWidgetQueryResult->setColumnWidth(5,20);
+    this->ui->tableWidgetQueryResult->setColumnWidth(4,80);
+    this->ui->tableWidgetQueryResult->setColumnWidth(3,120);
+    this->ui->tableWidgetQueryResult->setColumnWidth(2,143);
+    this->ui->tableWidgetQueryResult->setColumnWidth(6,97);
+    this->ui->tableWidgetQueryResult->setColumnWidth(7,97);
+    this->ui->tableWidgetQueryResult->verticalHeader()->setDefaultSectionSize(45);
+    this->ui->tableWidgetQueryResult->horizontalHeader()->setSectionResizeMode(QHeaderView::Fixed);
+    this->ui->tableWidgetQueryResult->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    this->ui->tableWidgetQueryResult->setFocusPolicy(Qt::NoFocus);
+    this->ui->tableWidgetQueryResult->setSelectionMode(QAbstractItemView::NoSelection);
     memset(this->filterBuffer, 0 , 1024);
     strcpy(this->filterBuffer, "CLIENTEVENTQUER");
     write(socketDescriptor, this->filterBuffer, 1024);
@@ -338,7 +444,8 @@ void MainWindow::InitLibrary()
     ui->checkBoxHorror->setCheckState(Qt::CheckState::Unchecked);
     ui->checkBoxManual->setCheckState(Qt::CheckState::Unchecked);
     ui->checkBoxThriller->setCheckState(Qt::CheckState::Unchecked);
-
+    ui->checkBoxRomance->setCheckState(Qt::CheckState::Unchecked);
+    ui->checkBoxFantasy->setCheckState(Qt::CheckState::Unchecked);
     ui->libGroup->show();
 
     this->actualNumberEntries = 0;
@@ -352,6 +459,7 @@ void MainWindow::InitLibrary()
 
     this->PrintResults(this->entries, this->actualNumberEntries);
     this->AddToList(this->entries, this->actualNumberEntries);
+    //this->ui->tableWidgetQueryResult->resizeRowsToContents();
 }
 
 int MainWindow::GetCurrentGenreFlag()
@@ -375,6 +483,10 @@ int MainWindow::GetCurrentGenreFlag()
         flag = flag | DB_CHILD;
     if(ui->checkBoxThriller->isChecked())
         flag = flag | DB_THRIL;
+    if(ui->checkBoxRomance->isChecked())
+        flag = flag | DB_ROMAN;
+    if(ui->checkBoxFantasy->isChecked())
+        flag = flag | DB_FANTA;
     if(flag == 0)
         flag = DB_ALLGN;
     return flag;
@@ -408,20 +520,8 @@ void MainWindow::on_pushButtonApplyFilter_clicked()
 
     if( 0 > read(socketDescriptor, &actualNumberEntries, 4))
         this->ReportLog(readError);
-    printf("PLMCOAIE%d\n", this->actualNumberEntries);
-    perror("a");
-    fflush(stdout);
     this->PrintResults(this->entries, actualNumberEntries);
-    perror("a");
-    printf("PLMCOAIE%d\n", this->actualNumberEntries);
-    perror("a");
-    fflush(stdout);
-    //ui->tableWidgetQueryResult->clear();
-    perror("a");
-    fflush(stdout);
     AddToList(this->entries, actualNumberEntries);
-    perror("a");
-    fflush(stdout);
     free(this->filterBuffer);
 }
 
@@ -530,13 +630,18 @@ void MainWindow::on_actionDisconnect_triggered()
 
 void MainWindow::on_actionSettings_triggered()
 {
-    QWidget *settingsWindow = new QWidget();
+    SettingsWindow* settings = new SettingsWindow(this);
+    /*QWidget *settingsWindow = new QWidget();
     QPushButton *cancelButton = new QPushButton();
     QPushButton *saveButton = new QPushButton();
     QPushButton *acceptButton = new QPushButton();
     QLayout *generalLayout = new QVBoxLayout(settingsWindow);
     QLayout *buttonsLayout = new QHBoxLayout();
-    QLayout *optionsLayout = new QVBoxLayout();
+    QLayout *optionsLayout = new QHBoxLayout();
+    QLabel *serverInformationLabel = new QLabel();
+    serverInformationLabel->setText("Server Connection Information:");
+    generalLayout->addWidget(serverInformationLabel);
+
 
     generalLayout->addItem(optionsLayout);
     generalLayout->addItem(buttonsLayout);
@@ -553,17 +658,48 @@ void MainWindow::on_actionSettings_triggered()
     buttonsLayout->addWidget(saveButton);
     buttonsLayout->addWidget(acceptButton);
 
-    QLabel *serverInformationLabel = new QLabel();
-    QLayout *IPLayout = new QHBoxLayout();
+    QLayout *labelLayout = new QVBoxLayout();
+    QLayout *lineEditLayout = new QVBoxLayout();
+    optionsLayout->addItem(labelLayout);
+    optionsLayout->addItem(lineEditLayout);
+
+    labelLayout->setParent(optionsLayout);
+    lineEditLayout->setParent(optionsLayout);
+
+    //QLayout *IPLayout = new QHBoxLayout();
     QLabel *serverIPLabel = new QLabel();
     QLineEdit *serverIPLineEdit = new QLineEdit();
-    QLayout *PortLayout = new QHBoxLayout();
+
+    //optionsLayout->addItem(IPLayout);
+    //IPLayout->setParent(optionsLayout);
+
+    serverIPLabel->setText("Server IP address");
+
+    labelLayout->addWidget(serverIPLabel);
+    lineEditLayout->addWidget(serverIPLineEdit);
+
+    //IPLayout->addWidget(serverIPLabel);
+    //IPLayout->addWidget(serverIPLineEdit);
+
+    //QLayout *PortLayout = new QHBoxLayout();
     QLabel *serverPortLabel = new QLabel();
     QLineEdit *serverPortLineEdit = new QLineEdit();
 
-    settingsWindow->setLayout(buttonsLayout);
+    //optionsLayout->addItem(PortLayout);
+    //PortLayout->setParent(optionsLayout);
+
+    serverPortLabel->setText("Server Port");
+
+    labelLayout->addWidget(serverPortLabel);
+    lineEditLayout->addWidget(serverPortLineEdit);
+
+    //PortLayout->addWidget(serverPortLabel);
+    //PortLayout->addWidget(serverPortLineEdit);
+
+    //settingsWindow->setLayout(buttonsLayout);
 
     settingsWindow->show();
+    this->setEnabled(false);*/
 }
 
 /*
@@ -582,3 +718,33 @@ void MainWindow::on_sliderMaxYear_valueChanged(int value)
 }
 */
 
+void MainWindow::keyPressEvent(QKeyEvent *keyEvent)
+{
+    printf("You pressed %s\n", keyEvent->text().toStdString().c_str());
+    fflush(stdout);
+    if(keyEvent->key() == Qt::Key_Enter||keyEvent->key() == Qt::Key_Return)
+    {
+        printf("blin\n");
+        fflush(stdout);
+        on_pushButtonLogin_clicked();
+    }
+}
+
+void MainWindow::keyReleaseEvent(QKeyEvent *keyEvent)
+{
+    printf("You released %s\n", keyEvent->text().toStdString().c_str());
+    fflush(stdout);
+}
+
+void MainWindow::on_actionHide_Show_triggered()
+{
+    if(this->ui->filterGroup->isHidden()==false)
+        {this->ui->filterGroup->hide(); this->ui->tableWidgetQueryResult->setColumnWidth(1,706); return;}
+    if(this->ui->filterGroup->isHidden()==true)
+        {this->ui->filterGroup->show(); this->ui->tableWidgetQueryResult->setColumnWidth(1,500);return;}
+}
+
+void MainWindow::on_pushButtonCreateAccount_clicked()
+{
+    CreateAccount * accountWindow = new CreateAccount(this, this->socketDescriptor);
+}

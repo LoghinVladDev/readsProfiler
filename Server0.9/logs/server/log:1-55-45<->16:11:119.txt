@@ -1,0 +1,10 @@
+[Server][1-55-45<->16:11:119]Waiting @ port 3000...
+[Server][1-56-4<->16:11:119]Waiting @ port 3000...
+[Thread - 0][1-56-4<->16:11:119]Waiting for message...
+[Thread - 0][1-56-4<->16:11:119]Received message from client.
+[Thread - 0][1-56-4<->16:11:119]Writing message to client.
+[Thread - 0][1-56-4<->16:11:119]Wrote message to client.
+[Thread - 0][1-56-14<->16:11:119]Received message from client.
+[Thread - 0][1-56-14<->16:11:119]Writing message to client.
+[Thread - 0][1-56-14<->16:11:119]Wrote message to client.
+[Thread - 0][1-56-14<->16:11:119]User admin has logged into the server!

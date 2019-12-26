@@ -16,11 +16,21 @@ DEFINES += QT_DEPRECATED_WARNINGS
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
+    createaccount.cpp \
+    documentwidget.cpp \
     main.cpp \
-    mainwindow.cpp
+    mainwindow.cpp \
+    pdfviewer.cpp \
+    readwindow.cpp \
+    settingswindow.cpp
 
 HEADERS += \
-    mainwindow.h
+    createaccount.h \
+    documentwidget.h \
+    mainwindow.h \
+    pdfviewer.h \
+    readwindow.h \
+    settingswindow.h
 
 FORMS += \
     mainwindow.ui
@@ -29,3 +39,6 @@ FORMS += \
 qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
+
+INCLUDEPATH += /usr/local/include/poppler/qt5
+LIBS += -L/usr/local/lib -lpoppler-qt5

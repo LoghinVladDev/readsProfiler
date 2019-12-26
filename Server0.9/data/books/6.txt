@@ -1,0 +1,5 @@
+A simple guide to object oriented programming in pascal
+
+Iordache Dan
+
+Ia uite. poo in pascal frate.

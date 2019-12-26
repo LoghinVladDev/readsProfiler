@@ -1,0 +1,11 @@
+[Server][20-21-13<->25:11:119]Waiting @ port 3000...
+[Server][20-21-22<->25:11:119]Waiting @ port 3000...
+[Thread - 0][20-21-22<->25:11:119]Waiting for message...
+[Thread - 0][20-21-22<->25:11:119]Received message from client.
+[Thread - 0][20-21-22<->25:11:119]Received message from client.
+[Thread - 0][20-21-22<->25:11:119]Writing message to client.
+[Thread - 0][20-21-22<->25:11:119]Wrote message to client.
+[Thread - 0][20-21-34<->25:11:119]Received message from client.
+[Thread - 0][20-21-34<->25:11:119]Writing message to client.
+[Thread - 0][20-21-34<->25:11:119]Wrote message to client.
+[Thread - 0][20-21-34<->25:11:119]User Lg1 has logged into the server!

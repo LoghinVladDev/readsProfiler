@@ -1,0 +1,50 @@
+[Server][18-7-50<->21:11:119]Waiting @ port 3000...
+[Server][18-8-0<->21:11:119]Waiting @ port 3000...
+[Thread - 0][18-8-0<->21:11:119]Waiting for message...
+[Thread - 0][18-8-0<->21:11:119]Received message from client.
+[Thread - 0][18-8-0<->21:11:119]Writing message to client.
+[Thread - 0][18-8-0<->21:11:119]Wrote message to client.
+[Thread - 0][18-8-0<->21:11:119]User admin has logged into the server!
+[Server][18-8-12<->21:11:119]Waiting @ port 3000...
+[Thread - 1][18-8-12<->21:11:119]Waiting for message...
+[Thread - 1][18-8-12<->21:11:119]Received message from client.
+[Thread - 1][18-8-12<->21:11:119]User admin already logged in!
+[Thread - 1][18-8-12<->21:11:119]Writing message to client.
+[Thread - 1][18-8-12<->21:11:119]Wrote message to client.
+[Thread - 1][18-9-28<->21:11:119]Received message from client.
+[Thread - 1][18-9-28<->21:11:119]Received message from client.
+[Thread - 1][18-9-28<->21:11:119]Writing message to client.
+[Thread - 1][18-9-28<->21:11:119]Wrote message to client.
+[Thread - 1][18-9-33<->21:11:119]Received message from client.
+[Thread - 1][18-9-33<->21:11:119]Received message from client.
+[Thread - 1][18-9-33<->21:11:119]Writing message to client.
+[Thread - 1][18-9-33<->21:11:119]Wrote message to client.
+[Thread - 1][18-9-42<->21:11:119]Received message from client.
+[Thread - 1][18-9-42<->21:11:119]Received message from client.
+[Thread - 1][18-9-42<->21:11:119]Writing message to client.
+[Thread - 1][18-9-42<->21:11:119]Wrote message to client.
+[Thread - 1][18-9-53<->21:11:119]Received message from client.
+[Thread - 1][18-9-53<->21:11:119]User admin already logged in!
+[Thread - 1][18-9-53<->21:11:119]Writing message to client.
+[Thread - 1][18-9-53<->21:11:119]Wrote message to client.
+[Thread - 1][18-10-0<->21:11:119]Received message from client.
+[Thread - 1][18-10-0<->21:11:119]Writing message to client.
+[Thread - 1][18-10-0<->21:11:119]Wrote message to client.
+[Thread - 1][18-10-7<->21:11:119]Received message from client.
+[Thread - 1][18-10-7<->21:11:119]Writing message to client.
+[Thread - 1][18-10-7<->21:11:119]Wrote message to client.
+[Thread - 1][18-10-7<->21:11:119]Writing message to client.
+[Thread - 1][18-10-7<->21:11:119]Wrote message to client.
+[Thread - 1][18-10-14<->21:11:119]Received message from client.
+[Server][18-10-23<->21:11:119]Waiting @ port 3000...
+[Thread - 2][18-10-23<->21:11:119]Waiting for message...
+[Thread - 2][18-10-23<->21:11:119]Received message from client.
+[Thread - 2][18-10-23<->21:11:119]Writing message to client.
+[Thread - 2][18-10-23<->21:11:119]Wrote message to client.
+[Thread - 2][18-10-29<->21:11:119]Received message from client.
+[Thread - 2][18-10-29<->21:11:119]Writing message to client.
+[Thread - 2][18-10-29<->21:11:119]Wrote message to client.
+[Thread - 2][18-10-34<->21:11:119]Received message from client.
+[Thread - 2][18-10-34<->21:11:119]Writing message to client.
+[Thread - 2][18-10-34<->21:11:119]Wrote message to client.
+[Thread - 2][18-10-36<->21:11:119]Received message from client.
