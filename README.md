@@ -7,3 +7,5 @@ ReadsProfiler and network template
 - connection issues at create account if server is started after create account function in client
 - client crash leads to server not dumping write info
 - settings do not yet update (client)
+
+For client build, install POPPLER library
