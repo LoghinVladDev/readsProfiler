@@ -10,4 +10,3 @@ Ca sa rulezi fara (segmentation fault)
         folosind user & pass existent in json
 Build shortcut :
 g++ serverReadsProfiler.cpp -o Server -lpthread -ljson-c &&
-g++ clientReadsProfiler.cpp -o Client

@@ -1,0 +1,15 @@
+{
+	"folders": [
+		{
+			"path": "/home/loghin/Proiecte_Retele_2019"
+		},
+		{
+			"path": "/home/loghin/LFACtest"
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"inet.h": "c"
+		}
+	}
+}

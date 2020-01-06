@@ -1,5 +1,16 @@
 #pragma once
 
+struct DBResult
+{
+    char bookName[128];
+    char authorName[128];
+    int year;
+    char genre[64];
+    int rating;
+    int ISBN;
+    char diskPath[256];
+};
+
 enum logs
 {
     socketError, connectError, writeError, readError
@@ -19,14 +30,27 @@ class Client
         Client(int = 0,char ** = nullptr);
         void Init();
         void LoginRequest();
+        void PrintResults(DBResult*, const int&);
         void Runtime();
         ~Client();
 };
 
+void Client::PrintResults(DBResult* array, const int& length)
+{
+    for (size_t i = 0; i < length; i++)
+    {
+        printf("Title: %s\nAuthor: %s\nGenre: %s\nYear: %d\nRating: %d\nISBN: %d\n",
+            array[i].bookName, array[i].authorName, array[i].genre, array[i].year, array[i].rating,
+            array[i].ISBN);
+    }
+    
+}
+//1;20;;;1555;;;2
 void Client::Runtime()
 {
     char *command = (char*)malloc(1024);
-    char *info = (char*)malloc(65536);
+    char *p;
+    int noEntries = 0;
     while(true)
     {
         memset(command, 0 ,1024);
@@ -34,11 +58,32 @@ void Client::Runtime()
         read(0, command, 1024);
         if( 0 >= write(socketDescriptor, command, 1024))
             this->ReportLog(writeError);
-        if( 0 > read(socketDescriptor, info, 65536))
+        //perror("0");  
+        p = strchr(command, ';')+1;
+        *strchr(strchr(command,';')+1,';') = 0;
+        if(*p)
+        noEntries = atoi(p);
+        else   
+        noEntries = 20;
+        
+        DBResult *entries = (DBResult*)malloc(noEntries*sizeof(DBResult));
+        memset(entries, 0, sizeof(DBResult) * noEntries);
+        *(strchr(command,';') +strlen(strchr(command,';')) + 1)= ';';
+        // ?printf("%d %s\n",errno, command);
+        if( 0 > read(socketDescriptor, entries, sizeof(DBResult) * noEntries))
             this->ReportLog(readError);
+            //perror("a");
+            //fflush(stdout);
+        if( 0 > read(socketDescriptor, &noEntries, 4))
+            this->ReportLog(readError);
+            //perror("b");
+            //fflush(stdout);
+            printf("%d\n", noEntries);
+        printf("%s %d\n", p, noEntries);
+        this->PrintResults(entries, noEntries);
+        free(entries);
     }
     free(command);
-    free(info);
 }
 
 void Client::LoginRequest()
