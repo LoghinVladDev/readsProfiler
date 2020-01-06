@@ -1,0 +1,5 @@
+A simple guide to c/c++ programming
+
+Loghin Vlad
+
+void*
